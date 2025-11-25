@@ -1,4 +1,5 @@
 # model_b1.py
+#B1 is a DC-based hot start, which will be used for B2.  
 import copy
 import torch
 import torch.nn as nn
@@ -197,33 +198,6 @@ def generate_dummy_dataset(net_base, n_samples=50, max_tries=20):
 # 5) Training: Direct (A1) and Hot-Start (B1)
 # ------------------------
 
-def train_direct(net, n_epochs=20, lr=1e-3):
-    """
-    Original direct mapping (A1) training: supervised MSE from loads -> p_gen + vm labels
-    """
-    X_np, Y_np = generate_dummy_dataset(net, n_samples=300)
-    
-    # Convert to tensors
-    X = torch.tensor(X_np, dtype=torch.float32)
-    Y = torch.tensor(Y_np, dtype=torch.float32)  # full p_gen + vm, no slicing needed
-    
-    n_load = X.shape[1]
-    n_gen = Y.shape[1]
-
-    model = DirectMap(n_load, n_gen)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = nn.MSELoss()
-
-    for epoch in range(n_epochs):
-        optimizer.zero_grad()
-        Y_pred = model(X)
-        loss = loss_fn(Y_pred, Y)
-        loss.backward()
-        optimizer.step()
-        if (epoch+1) % 5 == 0 or epoch==0:
-            print(f"[A1] Epoch {epoch+1}/{n_epochs}  Loss={loss.item():.6f}")
-    return model
-
 def create_base_hotstart(net, n_samples):
     """
     Construct base-case hot starts p0 (use network base case PF)
@@ -252,7 +226,7 @@ def train_hotstart_b1(net, n_epochs=60, batch_size=32, lr=1e-3, n_samples=2000, 
     N = X_np.shape[0]
     n_load = X_np.shape[1] // 2
 
-    p0 = create_base_hotstart(net, N)
+    p0 = Y_pgen_np.clone().detach().cpu().numpy()  # PF dispatch for each sample
 
     X = X_np.float().to(device)
     Y = Y_pgen_np.float().to(device)
@@ -304,29 +278,25 @@ def train_hotstart_b1(net, n_epochs=60, batch_size=32, lr=1e-3, n_samples=2000, 
         if epoch % 5 == 0 or epoch == 1:
             print(f"[B1] Epoch {epoch}/{n_epochs}  loss={epoch_loss:.6e}")
 
-    # SAVE CHECKPOINT FOR B2
-    torch.save(model.state_dict(), "train_hotstart_b1.pth")
-    print("Saved hot-start checkpoint: train_hotstart_b1.pth")
-
+    
     trained = {
-    'model': model.cpu(),
-    'dc_layer': dc_layer.cpu(),
-    'p0_template': p0,
-    'n_load': n_load,
-    'n_gen': n_gen,
+        'model': model.cpu(),
+        'dc_layer': dc_layer.cpu(),
+        'p0_template': p0,
+        'n_load': n_load,
+        'n_gen': n_gen,
     }
 
-    torch.save(trained, "train_hotstart_b1.pth")  # save the full dict
-    print("Saved hot-start checkpoint: train_hotstart_b1.pth")
-
-
+    torch.save(trained, "train_hotstart_b1.pth")
+    print("Saved B1 full checkpoint with p0_template.")
 
     return trained
 
 
 # ------------------------
-# 6) Inference: B2 warm-start + optional AC PF (Pandapower). DC-corrected generator outputs
+# 6) Inference: Hot start for B2. DC-corrected generator outputs
 # ------------------------
+
 def inference_b1(net, trained, x_load_np, run_ac_pf=True, verbose=True):
     """
     x_load_np: shape (M, 2*n_load) or (2*n_load,)
@@ -335,7 +305,6 @@ def inference_b1(net, trained, x_load_np, run_ac_pf=True, verbose=True):
 
     model = trained['model']
     dc_layer = trained['dc_layer']
-    p0_template = trained['p0_template']     # numpy array or tensor from training
     n_load = trained['n_load']
     n_gen = trained['n_gen']
 
@@ -345,20 +314,38 @@ def inference_b1(net, trained, x_load_np, run_ac_pf=True, verbose=True):
     if x_load_np.ndim == 1:
         x_load_np = x_load_np.reshape(1, -1)
 
-    # Convert load input to tensor
-    X = torch.tensor(x_load_np, dtype=torch.float32)
-
-    # --- FIX #1: Convert p0_template to tensor ---
-    if isinstance(p0_template, np.ndarray):
-        p0 = torch.tensor(p0_template[:X.shape[0]], dtype=torch.float32)
+    # --- FIX: safely convert to tensor ---
+    if isinstance(x_load_np, np.ndarray):
+        X = torch.from_numpy(x_load_np).float()
+    elif isinstance(x_load_np, torch.Tensor):
+        X = x_load_np.detach().clone().float()
     else:
-        # already a tensor (rare)
-        p0 = p0_template[:X.shape[0]].clone().float()
+        raise TypeError("x_load_np must be a numpy array or torch tensor.")
 
-    # Move to same device as model
+
+
+    # --- FIX: compute device FIRST ---
     device = next(model.parameters()).device
     X = X.to(device)
-    p0 = p0.to(device)
+
+    # Compute p0 via PF for each sample
+    p0_list = []
+    for i in range(X.shape[0]):
+        net_local = copy.deepcopy(net)
+
+        # Set loads
+        p_load_i = x_load_np[i, :n_load]
+        q_load_i = x_load_np[i, n_load:]
+        for j, l in enumerate(net_local.load.index):
+            net_local.load.at[l, 'p_mw'] = float(p_load_i[j])
+            net_local.load.at[l, 'q_mvar'] = float(q_load_i[j])
+
+        # PF-based hot start
+        pp.runpp(net_local)
+        p0_list.append(net_local.res_gen['p_mw'].values.copy())
+
+    # --- FIX: convert AFTER device is known ---
+    p0 = torch.tensor(np.array(p0_list), dtype=torch.float32, device=device)
 
     # Forward pass
     with torch.no_grad():
@@ -368,11 +355,11 @@ def inference_b1(net, trained, x_load_np, run_ac_pf=True, verbose=True):
 
         # DC feasibility projection
         p_dc_tensor = dc_layer(p_hat, total_load)
-        p_dc = p_dc_tensor.cpu().numpy()     # convert after computation
+        p_dc = p_dc_tensor.cpu().numpy()
 
     out = {'p_dc_corrected': p_dc}
 
-    # ----- Optional AC PF refinement -----
+    # ----- Optional AC PF evaluation -----
     if run_ac_pf:
         p_pf_list = []
         vm_pf_list = []
@@ -395,7 +382,6 @@ def inference_b1(net, trained, x_load_np, run_ac_pf=True, verbose=True):
                 except Exception:
                     pass
 
-            # Try AC PF
             try:
                 pp.runpp(net_local, calculate_voltage_angles=True)
             except Exception as e:
