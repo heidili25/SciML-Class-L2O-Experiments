@@ -58,7 +58,6 @@ Models A1–B2 are compared along several OPF-style metrics:
 ```
 SciML-Class-L2O-Experiments/
 │
-├── model_a0_acopf.py        # Baseline AC-OPF
 ├── model_a1.py              # Direct supervised AC-OPF surrogate + dataset generator
 ├── model_a2.py              # Physics-informed surrogate (Neuromancer)
 │
