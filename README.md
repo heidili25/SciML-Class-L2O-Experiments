@@ -52,9 +52,54 @@ Models A1–B2 are compared along several OPF-style metrics:
 - **Runtime**  
   Wall-clock forward-pass time (no PF/OPF inside timing).
 
-`figures.py` produces a four-panel summary figure visualizing these metrics.
+---
+## Repository Structure
+
+```
+SciML-Class-L2O-Experiments/
+│
+├── model_a0_acopf.py        # Baseline AC-OPF
+├── model_a1.py              # Direct supervised AC-OPF surrogate + dataset generator
+├── model_a2.py              # Physics-informed surrogate (Neuromancer)
+│
+├── model_b1.py              # DC hot-start model
+├── model_b2.py              # B2 refinement model
+│
+├── figures.py               # Final 4-panel comparison script
+├── comparison_metrics.png   # Generated comparison metrics and figure
+│
+└── README.md
+```
 
 ---
 
-## Repository Structure
+## Reproducing the Experiments
+
+### 1. Generate AC-OPF training dataset
+A1 automatically generates and saves `acopf_dataset.pt`.
+
+### 2. Train the supervised and physics-informed models (A1 and A2)
+
+### 3. Train the DC hot-start and refinement models (B1 and B2)
+
+### 4. Generate the OPF comparison figure (`figures.py`)
+
+
+---
+
+## Repository
+
+GitHub: https://github.com/heidili25/SciML-Class-L2O-Experiments
+
+---
+
+## Contact
+
+For questions, please contact:  
+**Heidi Li** — hli279@jhu.edu
+
+
+
+
+
 
