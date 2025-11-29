@@ -66,7 +66,6 @@ SciML-Class-L2O-Experiments/
 ├── model_b2.py              # B2 refinement model
 │
 ├── figures.py               # Final 4-panel comparison script
-├── comparison_metrics.png   # Generated comparison metrics and figure
 │
 └── README.md
 ```
