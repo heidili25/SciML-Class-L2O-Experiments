@@ -24,23 +24,6 @@ def build_ybus_numpy(net):
 # 2) Neural Networks (Modalities)
 # ------------------------
 
-class DirectMap(nn.Module):
-    #a1 network (baseline direct mapping without residual correction)
-    """Direct mapping MLP: pload/qload -> generator p/vm"""
-    def __init__(self, n_load, n_gen, hidden_sizes=[64,64]):
-        super().__init__()
-        layers = []
-        last_size = n_load
-        for h in hidden_sizes:
-            layers.append(nn.Linear(last_size,h))
-            layers.append(nn.ReLU())
-            last_size = h
-        layers.append(nn.Linear(last_size,n_gen))
-        self.model = nn.Sequential(*layers)
-
-    def forward(self,x):
-        return self.model(x)
-
 class HotStartMap(nn.Module):
     """Hot-start mapping: pload/qload + prior feasible p0, output is the residual to correct hot-start"""
     def __init__(self, n_load, n_state, n_gen, hidden_sizes=[128,128]):
@@ -159,10 +142,10 @@ def generate_dummy_dataset(net_base, n_samples=50, max_tries=20):
             # Copy network for safe editing
             net = copy.deepcopy(net_base)
 
-            # Conservative perturbation (±10%)
+            # Conservative perturbation (±20%)
             pload_orig = net_base.load.p_mw.values
             qload_orig = net_base.load.q_mvar.values
-            scale = 0.9 + 0.2 * np.random.rand(n_load)
+            scale = 0.8 + 0.4 * np.random.rand(n_load)
 
             pload = pload_orig * scale
             qload = qload_orig * scale

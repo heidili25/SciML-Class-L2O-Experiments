@@ -39,7 +39,7 @@ def setup_opf_costs(net, linear_cost=10.0):
     Attach linear generation costs so that pp.runopp() has an objective.
 
     This matches the baseline AC-OPF script used for A0:
-        cost = 10 × Pg  [€/MW]
+        cost = 10 × Pg  [€/MWh]
     """
     if len(net.poly_cost) > 0:
         net.poly_cost.drop(net.poly_cost.index, inplace=True)
@@ -128,7 +128,7 @@ def generate_dummy_dataset_opf(net, n_samples=80):
 
 
 # ============================================================
-# (3) A1 training loop (KEEP THIS)
+# (3) A1 training loop
 # ============================================================
 
 def train_direct(model, X, Y, n_epochs=20, lr=1e-3):

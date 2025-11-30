@@ -3,7 +3,7 @@ A2: Physics-Informed Direct Mapping
 Extends A1 by:
 • Training on AC-OPF labels (imported from A1 generator)
 • Using Neuromancer PenaltyLoss during training
-• Optional PF projection after inference
+• PF projection after inference
 """
 
 import torch
@@ -200,4 +200,8 @@ if __name__ == "__main__":
         print("Pg_PF  :", np.round(p_pf, 3))
         print("Vm_pred:", np.round(v_pred, 3))
         print("Vm_PF  :", np.round(v_pf, 3))
+
+    torch.save(model_a2.state_dict(), "a2_model.pt")
+    print("Saved A2 model to a2_model.pt")
+
 
